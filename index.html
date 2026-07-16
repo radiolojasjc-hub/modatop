@@ -253,7 +253,8 @@
             const GENERO = 'MODA TOP';
             const COR = '#ff4400';
             const JSON_URL = 'moda.json';
-            const BASE_URL = 'https://raw.githubusercontent.com/radiolojasjc-hub/moda/refs/heads/main/';
+            // BASE_URL NÃO É MAIS NECESSÁRIA POIS USAMOS URLS COMPLETAS
+            // const BASE_URL = 'https://raw.githubusercontent.com/radiolojasjc-hub/moda/refs/heads/main/';
 
             let musicas = [];
             let currentPlaylist = [];
@@ -338,73 +339,6 @@
 
             function voltarPlay12() {
                 window.location.href = 'https://radiolojasjc-hub.github.io/play12/';
-            }
-
-            function gerarUrlCompleta(nome) {
-                if (!nome || !nome.trim()) return '';
-                if (nome.startsWith('http://') || nome.startsWith('https://')) return nome;
-                let n = nome.replace(/^\.\//, '').replace(/^\/+/, '');
-                n = n.replace(/[^a-zA-Z0-9\-_.]/g, '');
-                if (!n) return '';
-                return BASE_URL + n;
-            }
-
-            function gerarUrlsAlternativas(musica) {
-                const urls = new Set();
-                const src = musica.src || '';
-                if (src && src.trim()) { const u = gerarUrlCompleta(src); if (u) urls.add(u); }
-                
-                const base = src.replace(/\.[^.]+$/, '');
-                const exts = ['mp3', 'm4a'];
-                const variacoes = [
-                    base,
-                    base.replace(/ /g, '_'),
-                    base.replace(/ /g, '-'),
-                    base.replace(/[^a-zA-Z0-9]/g, ''),
-                    musica.title.replace(/[^a-zA-Z0-9 ]/g, '').trim().replace(/ /g, '_'),
-                    musica.title.replace(/[^a-zA-Z0-9 ]/g, '').trim().replace(/ /g, '-'),
-                    (musica.artist + '_' + musica.title).replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_')
-                ];
-                
-                const titleClean = musica.title.replace(/[^a-zA-Z0-9 ]/g, '').trim();
-                if (titleClean && titleClean.length > 2) {
-                    variacoes.push(titleClean);
-                    variacoes.push(titleClean.replace(/ /g, '_'));
-                    variacoes.push(titleClean.replace(/ /g, '-'));
-                }
-                
-                const artist = musica.artist || '';
-                const combo = (artist + ' ' + musica.title).replace(/[^a-zA-Z0-9 ]/g, '').trim();
-                if (combo && combo.length > 3) {
-                    variacoes.push(combo);
-                    variacoes.push(combo.replace(/ /g, '_'));
-                    variacoes.push(combo.replace(/ /g, '-'));
-                }
-                
-                variacoes.forEach(n => {
-                    if (n && n.trim().length > 0) {
-                        exts.forEach(ext => {
-                            const nl = n.trim().replace(/[^a-zA-Z0-9\-_]/g, '');
-                            if (nl.length > 0) {
-                                const url = gerarUrlCompleta(nl + '.' + ext);
-                                if (url) urls.add(url);
-                            }
-                        });
-                    }
-                });
-                
-                if (src.endsWith('.m4a')) {
-                    const mp3 = src.replace(/\.m4a$/, '.mp3');
-                    const urlMp3 = gerarUrlCompleta(mp3);
-                    if (urlMp3) urls.add(urlMp3);
-                }
-                if (src.endsWith('.mp3')) {
-                    const m4a = src.replace(/\.mp3$/, '.m4a');
-                    const urlM4a = gerarUrlCompleta(m4a);
-                    if (urlM4a) urls.add(urlM4a);
-                }
-                
-                return Array.from(urls);
             }
 
             function updateFavCount() { favCount.textContent = favorites.length; }
@@ -559,35 +493,21 @@
                 updateNowPlaying(track);
                 adicionarAoHistorico(track);
 
-                const urls = gerarUrlsAlternativas(track);
-                if (urls.length === 0) { 
-                    showNotification("❌ Sem URL", 1000); 
-                    carregandoMusica = false; 
-                    setTimeout(nextTrack, 500); 
-                    return; 
+                // Usa a URL diretamente (já é completa)
+                const url = track.src;
+                if (!url) {
+                    showNotification("❌ Sem URL", 1000);
+                    carregandoMusica = false;
+                    setTimeout(nextTrack, 500);
+                    return;
                 }
 
-                console.log(`🎯 Tentando ${urls.length} URLs para: ${track.title}`);
+                console.log(`🎯 Tocando: ${track.title} - ${url}`);
 
-                let indiceAtual = 0;
                 let timeoutId = null;
                 let sucesso = false;
 
-                function tentarProximo() {
-                    if (indiceAtual >= urls.length) {
-                        if (!sucesso) {
-                            showNotification("⏭️ Pulando...", 800);
-                            carregandoMusica = false;
-                            setTimeout(nextTrack, 300);
-                        }
-                        return;
-                    }
-
-                    const url = urls[indiceAtual];
-                    if (indiceAtual > 0 && indiceAtual % 3 === 0) {
-                        showNotification(`🔄 Tentando... (${indiceAtual}/${urls.length})`, 1500);
-                    }
-
+                function tentarTocar() {
                     if (timeoutId) clearTimeout(timeoutId);
 
                     audio.pause();
@@ -597,10 +517,11 @@
                     timeoutId = setTimeout(() => {
                         if (!sucesso) {
                             console.warn(`⏰ Timeout para ${url}`);
-                            indiceAtual++;
-                            tentarProximo();
+                            showNotification("⏭️ Pulando...", 800);
+                            carregandoMusica = false;
+                            setTimeout(nextTrack, 300);
                         }
-                    }, 4000);
+                    }, 5000);
 
                     audio.oncanplay = () => {
                         if (timeoutId) clearTimeout(timeoutId);
@@ -613,25 +534,23 @@
                                 startTimer();
                                 carregandoMusica = false;
                                 showNotification(`✅ Tocando: ${track.title}`, 1000);
-                                if (url !== track.src) {
-                                    track.src = url;
-                                    try { localStorage.setItem('src_cache_' + track.id, url); } catch(e) {}
-                                }
                             })
                             .catch(() => {
-                                indiceAtual++;
-                                tentarProximo();
+                                showNotification("⏭️ Pulando...", 800);
+                                carregandoMusica = false;
+                                setTimeout(nextTrack, 300);
                             });
                     };
 
                     audio.onerror = () => {
                         if (timeoutId) clearTimeout(timeoutId);
-                        indiceAtual++;
-                        tentarProximo();
+                        showNotification("⏭️ Pulando...", 800);
+                        carregandoMusica = false;
+                        setTimeout(nextTrack, 300);
                     };
                 }
 
-                tentarProximo();
+                tentarTocar();
             }
 
             let buscaTimeout = null;
@@ -671,8 +590,7 @@
                         ultimoId = t.id; 
                         updateNowPlaying(t); 
                         adicionarAoHistorico(t); 
-                        const urls = gerarUrlsAlternativas(t);
-                        audio.src = urls[0] || t.src; 
+                        audio.src = t.src; 
                         audio.load(); 
                     } 
                 }
@@ -690,9 +608,8 @@
                 ultimoId = t.id;
                 updateNowPlaying(t);
                 adicionarAoHistorico(t);
-                const urls = gerarUrlsAlternativas(t);
-                if (isPlaying) { audio.pause(); audio.src = urls[0] || t.src; audio.load(); audio.play().catch(() => {}); }
-                else { audio.src = urls[0] || t.src; audio.load(); }
+                if (isPlaying) { audio.pause(); audio.src = t.src; audio.load(); audio.play().catch(() => {}); }
+                else { audio.src = t.src; audio.load(); }
                 currentIndex++;
                 showControls();
             }
